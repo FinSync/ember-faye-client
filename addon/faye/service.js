@@ -1,6 +1,5 @@
 import Ember from 'ember';
 const { getOwner, Logger, Service } = Ember;
-import { Authentication } from 'ember-faye-client/utils/faye-extensions';
 
 export default Service.extend({
   client: null,
@@ -20,7 +19,12 @@ export default Service.extend({
     let config = this.get('config');
     let client = new Faye.Client(config.URL, config.options);
 
-    client._authToken = config.authToken;
+    const Authentication = {
+      outgoing(message, callback) {
+        message.ext = { authToken: config.authToken };
+        callback(message);
+      }
+    };
     client.addExtension(Authentication);
 
     client.disable('autodisconnect');
