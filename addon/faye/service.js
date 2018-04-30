@@ -23,6 +23,8 @@ export default Service.extend({
     client._authToken = config.authToken;
     client.addExtension(Authentication);
 
+    client.disable('autodisconnect');
+
     return client;
   },
 
