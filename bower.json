@@ -1,0 +1,6 @@
+{
+  "name": "ember-faye-client",
+  "dependencies": {
+    "faye-browser": "1.1.2"
+  }
+}

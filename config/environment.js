@@ -2,5 +2,12 @@
 'use strict';
 
 module.exports = function(/* environment, appConfig */) {
-  return { };
+  return { 
+    faye: {
+      URL: null,
+      authToken: null,
+      options: {        
+      }
+    }
+  };
 };

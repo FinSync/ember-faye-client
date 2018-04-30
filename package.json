@@ -1,9 +1,10 @@
 {
   "name": "ember-faye-client",
-  "version": "0.0.0",
-  "description": "The default blueprint for ember-cli addons.",
+  "version": "0.0.1",
+  "description": "Faye client for Ember",
   "keywords": [
-    "ember-addon"
+    "ember-addon",
+    "faye"
   ],
   "license": "MIT",
   "author": "",
