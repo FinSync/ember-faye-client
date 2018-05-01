@@ -4,18 +4,55 @@ const { getOwner, Logger, Service } = Ember;
 export default Service.extend({
   client: null,
   config: null,
-  subscriptions: {},
+  listeners: null,
+  channels: null,
 
   init() {
     Logger.debug('Initializing Ember Faye service...');
     this._super(...arguments);
     let config = (getOwner(this).resolveRegistration('config:environment') || {}).faye || {};
     this.set('config', config);
+    this.set('listeners', new Set());
+    this.set('channels', new Set());
 
-    this.setupServiceClient();
+    this._setupServiceClient();
   },
 
-  createClient() {
+  addListener(listener) {
+    if (this._isExistingListener(listener)) {
+      return false;
+    }
+
+    if (!this.isConnected()) {
+      this.get('client').connect(this._onConnected, this);
+    }
+
+    this._listenOn(listener);
+    this.get('listeners').add(listener);
+  },
+
+  removeListener(listener) {
+    if (!this._isExistingListener(listener)) {
+      return false;
+    }
+
+    if (!this.isConnected()) {
+      this.get('client').connect(this._onConnected, this);
+    }
+
+    this._listenOff(listener);
+    this.get('listeners').delete(listener);
+  },
+
+  publish(channel, data) {
+    return this.get('client').publish(channel, data);
+  },
+
+  isConnected() {
+    return (this.get('client')._state == Faye.Client.CONNECTED);
+  },
+
+  _createClient() {
     let config = this.get('config');
     let client = new Faye.Client(config.URL, config.options);
 
@@ -32,42 +69,80 @@ export default Service.extend({
     return client;
   },
 
-  setupServiceClient(client = null) {
+  _setupServiceClient(client = null) {
     if (!client) {
-      client = this.createClient();
+      client = this._createClient();
     }
 
     this.set('client', client);
   },
 
-  publish(channel, payload, options = {}) {
-    return this.get('client').publish(channel, payload, options);
+  _listenOn(listener) {
+    let [channelName, eventName] = this._channelData(listener);
+
+    if (this._isExistingChannel(channelName)) {
+      return false;
+    }
+
+    let callback = (data) => {
+      this._propagate(eventName, data);
+    };
+    this.get('client').subscribe(channelName, callback, this);
+    this.get('channels').add(channelName);
   },
 
-  subscribe(channel, callback, binding) {
-    if (!binding) {
-      binding = this;
-    }
+  _listenOff(listener) {
+    let [channelName, eventName] = this._channelData(listener);
 
-    let bindCallback = callback.bind(binding);
-
-    console.debug(`Subscribing to ${channel}...`);
-    let subscription = this.get('client').subscribe(
-      channel,
-      (message) => {
-        bindCallback(message, channel);
+    if (this._isExistingChannel(channelName)) {
+      let callback = (data) => {
+        this._propagate(eventName, data);
       }
-    ).then(() => {
-      console.debug(`Subscribed to ${channel}.`);
+      this.get('client').unsubscribe(channelName, callback, this);
+      this.get('channels').remove(channelName);
+    }
+  },
+
+  _propagate(event, data) {
+    let listeners = this.get('listeners').filter((listener) => {
+      return (listener.event == event);
     });
 
-    let subscriptions = this.get('subscriptions');
-    if (!subscriptions[channel]) {
-      subscriptions[channel] = [];
-    }
-    subscriptions[channel].push(subscription);
-    this.set('subscriptions', subscriptions);
+    let action = Ember.String.camelize(event + '_handler');
 
-    return subscription;
+    listeners.forEach((l) => {
+      l.context.send(action, data);
+    });
+  },
+
+  _isExistingListener(listener) {
+    let existingListeners = this.get('listeners').filter((l) => {
+      return (listener.event == l.event) &&
+             (listener.context == l.context) &&
+             (listener.tenantId == l.tenantId);
+    });
+
+    return (existingListeners.length > 0);
+  },
+
+  _isExistingChannel(channelName) {
+    let existingChannels = this.get('channels').filter((c) => {
+      return (channelName == c);
+    });
+
+    return (existingChannels.length > 0);
+  },
+
+  _onConnected() { },
+
+  _channelData(listener) {
+    let eventName = listener.channel;
+
+    let channelName = '/' + Ember.String.decamelize(eventName);
+    if ((listener.tenantId != undefined) && (listener.tenantId != null)) {
+      channelName = '/' + listener.tenantId + channelName;
+    }
+
+    return [channelName, eventName];
   }
 });
